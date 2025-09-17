@@ -3,6 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 // task enqueues right away
@@ -35,10 +39,19 @@ func main() {
 	task := NewTask("email", payload)
 	task2 := NewTask("email", payload)
 	client := NewClient(20)
-	client.Enqueue(task)
+	client.EnqueueEvery(10*time.Second, task)
 	client.Enqueue(task2)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	fmt.Println("running — press Ctrl+C to exit")
+
 	// close(client.tasks)
 
-	worker := Worker{client: client, Concurrency: 2}
-	worker.Run(handler)
+	go func() {
+		worker := Worker{client: client, Concurrency: 2}
+		worker.Run(handler)
+	}()
+	<-quit
+	close(client.tasks)
 }
