@@ -6,7 +6,7 @@ import (
 )
 
 type Worker struct {
-	client      *Client
+	Client      *Client
 	Concurrency int
 }
 
@@ -19,7 +19,7 @@ func (w *Worker) Run(handler Handler) {
 	for i := 0; i < w.Concurrency; i++ {
 		go func() {
 			defer wg.Done()
-			for task := range w.client.tasks {
+			for task := range w.Client.tasks {
 				if err := handler(task); err != nil {
 					fmt.Printf("Task %s failed", task.TaskName)
 				}
