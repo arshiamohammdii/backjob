@@ -2,17 +2,14 @@ package backjob
 
 import (
 	"time"
-
-	"github.com/robfig/cron/v3"
 )
 
 type Client struct {
 	tasks chan *Task
-	cron  *cron.Cron
 }
 
 func NewClient(bufferSize int) *Client {
-	return &Client{tasks: make(chan *Task, bufferSize), cron: cron.New(cron.WithSeconds())}
+	return &Client{tasks: make(chan *Task, bufferSize)}
 }
 
 func (c *Client) Enqueue(task *Task) error {
