@@ -27,5 +27,8 @@ func (w *Worker) Run(handler Handler) {
 		}()
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		fmt.Println("all workers finished")
+	}()
 }
