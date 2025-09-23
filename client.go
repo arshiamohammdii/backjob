@@ -2,29 +2,32 @@ package backjob
 
 import (
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
-type Client struct {
-	tasks chan *Task
+type ClientOptions struct {
+	Address  string
+	Password string
+	Db       int
 }
 
-func NewClient(bufferSize int) *Client {
-	return &Client{tasks: make(chan *Task, bufferSize)}
+type backJobClient struct {
+	rdb *redis.Client
 }
 
-func (c *Client) Enqueue(task *Task) error {
-	c.tasks <- task
+func NewbackJobClient(options ClientOptions) *backJobClient {
+	return &backJobClient{rdb: redis.NewClient(&redis.Options{
+		Addr:     options.Address,
+		Password: options.Password,
+		DB:       options.Db,
+	})}
+}
+
+func (c *backJobClient) Enqueue(task *Task) error {
 	return nil
-
 }
 
-func (c *Client) EnqueueEvery(d time.Duration, task *Task) error {
-	go func() {
-		tick := time.NewTicker(d)
-		defer tick.Stop()
-		for range tick.C {
-			_ = c.Enqueue(task)
-		}
-	}()
+func (c *backJobClient) EnqueueEvery(d time.Duration, task *Task) error {
 	return nil
 }

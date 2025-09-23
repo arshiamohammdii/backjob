@@ -1,3 +1,4 @@
+// Package backjob launches a worker to make the jobs running
 package backjob
 
 import (
