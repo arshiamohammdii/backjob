@@ -2,34 +2,63 @@
 package backjob
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"sync"
+	"github.com/redis/go-redis/v9"
+	"time"
 )
 
-type Worker struct {
-	Client      *Client
-	Concurrency int
+type Handler func(task *Task) error
+type Server struct {
+	rdb      *redis.Client
+	handlers map[string]Handler
 }
 
-type Handler func(task *Task) error
+func NewServer(opts ClientOptions) *Server {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     opts.Address,
+		Password: opts.Password,
+		DB:       opts.DB,
+	})
 
-func (w *Worker) Run(handler Handler) {
-	var wg sync.WaitGroup
-
-	wg.Add(w.Concurrency)
-	for i := 0; i < w.Concurrency; i++ {
-		go func() {
-			defer wg.Done()
-			for task := range w.Client.tasks {
-				if err := handler(task); err != nil {
-					fmt.Printf("Task %s failed", task.TaskName)
-				}
-			}
-		}()
+	return &Server{
+		rdb:      rdb,
+		handlers: make(map[string]Handler),
 	}
+}
+func (s *Server) RegisterHandler(taskName string, h Handler) {
+	s.handlers[taskName] = h
+}
 
-	go func() {
-		wg.Wait()
-		fmt.Println("all workers finished")
-	}()
+func (s *Server) Run(ctx context.Context) error {
+	//pop task from redis, this should happend in loop
+	for {
+		res, err := s.rdb.BRPop(ctx, 0*time.Second, DefaultNormalQueue).Result()
+		if err != nil {
+			if err == redis.Nil {
+				continue
+			}
+			return err
+		}
+
+		payload := res[1]
+
+		var task Task
+		if err := json.Unmarshal([]byte(payload), &task); err != nil {
+			fmt.Println("Invalid task:", err)
+			continue
+		}
+
+		if handler, ok := s.handlers[task.TaskName]; ok {
+			go func() {
+				if err := handler(&task); err != nil {
+					fmt.Println("something wrong with the task")
+				}
+			}()
+		} else {
+			fmt.Println("No handler for:", task.TaskName)
+		}
+
+	}
 }
