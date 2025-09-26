@@ -10,6 +10,7 @@ import (
 )
 
 const DefaultNormalQueue = "queue"
+const DefaultDelayedQueue = "delayed-queue"
 
 type ClientOptions struct {
 	Address  string
@@ -29,7 +30,12 @@ func NewBackJobClient(options ClientOptions) *BackJobClient {
 	})}
 }
 
-func (c *BackJobClient) Enqueue(task *Task, d ...time.Duration) error {
+func ProcessIn(d time.Duration) int64 {
+	now := time.Now()
+	return now.Add(d).Unix()
+}
+
+func (c *BackJobClient) Enqueue(task *Task, t ...int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -38,13 +44,16 @@ func (c *BackJobClient) Enqueue(task *Task, d ...time.Duration) error {
 		panic(err)
 	}
 
-	if len(d) == 0 {
+	if len(t) == 0 {
 		_, err := c.rdb.LPush(ctx, DefaultNormalQueue, data).Result()
 		if err != nil {
 			return err
 		}
 	} else {
-		fmt.Printf("this feature is not implemented yet")
+		_, err := c.rdb.ZAdd(ctx, DefaultDelayedQueue, redis.Z{Member: data, Score: float64(t[0])}).Result()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

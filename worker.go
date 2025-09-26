@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/redis/go-redis/v9"
+	"strconv"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type Handler func(task *Task) error
@@ -32,7 +34,7 @@ func (s *Server) RegisterHandler(taskName string, h Handler) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	//pop task from redis, this should happend in loop
+	go s.RunDelayedTasks(ctx)
 	for {
 		res, err := s.rdb.BRPop(ctx, 0*time.Second, DefaultNormalQueue).Result()
 		if err != nil {
@@ -60,5 +62,36 @@ func (s *Server) Run(ctx context.Context) error {
 			fmt.Println("No handler for:", task.TaskName)
 		}
 
+	}
+}
+
+func (s *Server) RunDelayedTasks(ctx context.Context) {
+	for {
+		now := time.Now().Unix()
+		tasks, err := s.rdb.ZRangeByScore(ctx, DefaultDelayedQueue, &redis.ZRangeBy{Min: "-inf", Max: strconv.FormatInt(now, 10)}).Result()
+		if err != nil {
+			panic(err)
+		}
+
+		for _, task := range tasks {
+
+			_, err := s.rdb.ZRem(ctx, DefaultDelayedQueue, task).Result()
+			if err != nil {
+				fmt.Println("something wrong with removing task from delayedQueue")
+				continue
+			}
+
+			_, err1 := s.rdb.LPush(ctx, DefaultNormalQueue, task).Result()
+			if err1 != nil {
+				fmt.Println("something wrong with pushing task to the normal Queue")
+				continue
+			}
+
+		}
+		//pop from DefaultDelayedQueue
+		//add to the default Queue
+
+		fmt.Printf("%v\n", tasks)
+		time.Sleep(1 * time.Second)
 	}
 }
